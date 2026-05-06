@@ -119,9 +119,7 @@ If you use this dataset, please cite:
 ```bibtex
 @article{han2026qifeng,
   title={QiFeng-CYGNSS: A Kilometer-Scale Tropical Cyclone Vector Wind Dataset from Physics-Constrained Diffusion Assimilation of Spaceborne GNSS-R Observations},
-  author={Han, Xinhai and others},
-  journal={Scientific Data},
-  year={2026}
+  xxx
 }
 ```
 
