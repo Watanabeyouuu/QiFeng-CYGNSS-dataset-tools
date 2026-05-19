@@ -1,7 +1,7 @@
-# QiFeng-CYGNSS: Kilometer-Scale Tropical Cyclone Vector Wind Dataset
+# QiFeng-CYGNSS: A Global Kilometre-Scale Tropical Cyclone Inner-Core Vector Wind Dataset
 
 <p align="center">
-  <img src="assets/sample_reconstructions.png" width="90%"/>
+  <img src="https://raw.githubusercontent.com/Watanabeyouuu/QiFeng-CYGNSS-dataset-tools/main/assets/sample_reconstructions.png" width="90%"/>
 </p>
 
 <p align="center">
@@ -12,26 +12,30 @@
 
 ## Overview
 
-This repository provides data access tools for the **QiFeng-CYGNSS** dataset — a collection of km-scale tropical cyclone (TC) 10-meter vector wind fields reconstructed from CYGNSS satellite observations using physics-constrained score-based diffusion assimilation.
+This repository provides data access tools for the **QiFeng-CYGNSS** dataset — a global kilometre-scale tropical cyclone (TC) inner-core 10 m vector wind dataset reconstructed from CYGNSS satellite observations using a physics-guided score-based diffusion assimilation framework.
+
+The dataset is described in the companion data descriptor paper submitted to *Earth System Science Data* (Han et al., 2026a). The reconstruction methodology, validation, and ablation experiments are documented in the methodology preprint (Han et al., 2026b; [arXiv:2605.18477](https://arxiv.org/abs/2605.18477)).
 
 **Key characteristics:**
 
 | Property | Value |
 |----------|-------|
-| Spatial coverage | Storm-relative domain, 384 km × 384 km |
+| Spatial coverage | Storm-relative domain, 384 km × 384 km, all six active global basins (NA, EP, WP, NI, SI, SP) |
 | Grid resolution | 1.5 km (256 × 256 pixels) |
-| Temporal coverage | 2020–2022, all global TC basins |
-| Number of TCs | ~290 named storms |
-| Total snapshots | ~5,000 (6-hourly) |
-| Variables | u10, v10 (10-m wind components), observation metadata |
+| Temporal coverage | January 2020 – September 2022 |
+| Number of TCs | 249 named storms |
+| Total snapshots | 4955 (at every IBTrACS reporting time, primarily 6-hourly) |
+| OCS-pass snapshots | 1960 (39.6 %), recommended for quantitative use |
+| Variables | u10, v10 (10-m wind components), observation metadata, OCS quality flag |
+| Ensemble uncertainty | 16-member pixel-level spread for 138 major-hurricane snapshots |
 | Format | NetCDF-4 (CF-1.8 compliant) |
-| Size | ~2.9 GB |
+| Size | ~2.0 GB |
 
 ## Dataset Access
 
 The full dataset is archived on Zenodo:
 
-[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.XXXXXXX-blue)](https://doi.org/10.5281/zenodo.XXXXXXX)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20046109-blue)](https://doi.org/10.5281/zenodo.20046109)
 
 ## File Structure
 
@@ -40,8 +44,8 @@ QiFeng_CYGNSS_dataset/
 ├── IAN_2022.nc                  # Per-TC NetCDF files
 ├── HINNAMNOR_2022.nc
 ├── FIONA_2022.nc
-├── ...                          # (~290 files total)
-└── ensemble_uncertainty.nc      # Pixel-level ensemble spread (138 cases)
+├── ...                          # 249 per-TC files (one per named storm)
+└── ensemble_uncertainty.nc      # Pixel-level 16-member ensemble spread (138 major-hurricane snapshots)
 ```
 
 Each per-TC file contains:
@@ -65,17 +69,26 @@ Each per-TC file contains:
 ### Read a NetCDF file
 
 ```python
-import netCDF4 as nc4
+import xarray as xr
 import numpy as np
 
-ds = nc4.Dataset('IAN_2022.nc', 'r')
-u10 = ds.variables['u10'][:]   # (time, 256, 256) in m/s
-v10 = ds.variables['v10'][:]
-ws = np.sqrt(u10**2 + v10**2)  # wind speed
+ds = xr.open_dataset('IAN_2022.nc')
 
-print(f"Storm: {ds.storm_name}, Basin: {ds.basin}")
-print(f"Snapshots: {u10.shape[0]}, Max wind: {np.nanmax(ws):.1f} m/s")
-ds.close()
+# Pick a single snapshot
+t = '2022-09-28T00:00:00'
+u10 = ds['u10'].sel(time=t).values   # (256, 256) in m/s
+v10 = ds['v10'].sel(time=t).values
+ws  = np.sqrt(u10**2 + v10**2)
+
+# Metadata
+vmax = ds['ibt_vmax'].sel(time=t).item()
+ocs  = ds['meets_ocs'].sel(time=t).item()
+print(f"Storm: {ds.attrs['storm_name']}, Basin: {ds.attrs['basin']}")
+print(f"IBTrACS Vmax: {vmax} kt, OCS-pass: {ocs}, Max wind in field: {np.nanmax(ws):.1f} m/s")
+
+# Optional: companion 16-member ensemble uncertainty file (138 major-hurricane snapshots only)
+# ds_ens = xr.open_dataset('ensemble_uncertainty.nc')
+# spread = ds_ens['ws_spread'].sel(time=t).values
 ```
 
 ### Export to GeoTIFF
@@ -89,40 +102,83 @@ See [`export_tiff.py`](export_tiff.py) for batch conversion of NetCDF snapshots 
 
 ### Visualization notebook
 
-[`visualize_dataset.ipynb`](visualize_dataset.ipynb) demonstrates:
-- Loading and inspecting per-TC NetCDF files
-- Wind speed / vector field plotting
-- Multi-panel TC evolution visualization
-- Azimuthal-mean radial wind profiles
-- Overlay of CYGNSS observations on reconstructed fields
+[`visualize_dataset.ipynb`](visualize_dataset.ipynb) demonstrates how to:
+- Load a per-TC NetCDF file
+- Convert the storm-relative grid to geographic coordinates
+- Plot the wind speed field at peak intensity
+- Filter snapshots by the OCS quality flag
 
 ## Grid Convention
 
 - The grid is **storm-centric Cartesian**: pixel (128, 128) is the interpolated TC center.
 - Row index increases **southward**, column index increases **eastward**.
 - Physical coordinates can be computed from the TC center and 1.5 km pixel spacing.
-- The `meets_ocs` flag indicates whether observation coverage is sufficient for reliable reconstruction (n_obs ≥ 300 AND azimuthal coverage ≥ 62.5%).
+- The `meets_ocs` flag indicates whether observation coverage is sufficient for reliable reconstruction. All three of the following criteria must be met: (a) number of CYGNSS observations `n_obs ≥ 300`; (b) inner-core spatial coverage of at least 7 super-grid cells within 100 km of the TC centre; (c) azimuthal coverage fraction `az_cov ≥ 0.625` (≥ 5 out of 8 azimuthal octants containing observations).
+
+## Validation summary
+
+Independent validation on the OCS-pass subset against high-resolution reference observations:
+
+| Reference | Cases | Pixel-level wind speed RMSE |
+|-----------|-------|----------------------------|
+| C-band SAR | 47 | 5.58 m s⁻¹ |
+| Airborne Tail Doppler Radar | 23 | 6.9 m s⁻¹ |
+
+Across the full 4955-snapshot sample, the dataset reduces V<sub>max</sub> bias by ~79 % relative to ERA5 and ~75 % relative to CCMP. See Han et al. (2026a, 2026b) for the full evaluation, ablation experiments, and basin-level statistics.
 
 ## Requirements
 
 ```
 numpy
+xarray
 netCDF4
 matplotlib
 rasterio        # for GeoTIFF export only
 ```
 
+Tested with Python 3.10.
+
 ## Citation
 
-If you use this dataset, please cite:
+If you use this dataset, please cite the data descriptor paper, the methodology preprint, and the Zenodo record:
 
 ```bibtex
 @article{han2026qifeng,
-  title={QiFeng-CYGNSS: A Kilometer-Scale Tropical Cyclone Vector Wind Dataset from Physics-Constrained Diffusion Assimilation of Spaceborne GNSS-R Observations},
-  xxx
+  title={A global kilometre-scale tropical cyclone inner-core vector wind field dataset from CYGNSS observations},
+  author={Han, Xinhai and Li, Xiaohui and Yang, Jingsong and Ni, Hanyue and Niu, Zeyi and Huang, Wei},
+  journal={Earth System Science Data},
+  year={2026},
+  note={in review}
+}
+
+@misc{han2026method,
+  title={Global kilometre-scale tropical cyclone inner-core vector winds from sparse scalar {CYGNSS} observations},
+  author={Han, Xinhai and Li, Xiaohui and Yang, Jingsong and Niu, Zeyi and Han, Guoqing and Wang, Jichao and Huang, Wei and Zheng, Yi and Ni, Hanyue and Wang, Yuhang and Tao, Wenwen and Aouf, Lotfi and Peng, Shiqiu and Chen, Dake},
+  year={2026},
+  eprint={2605.18477},
+  archivePrefix={arXiv},
+  primaryClass={physics.ao-ph},
+  doi={10.48550/arXiv.2605.18477}
+}
+
+@misc{han2026dataset,
+  title={{QiFeng-CYGNSS}: A Global Kilometre-Scale Tropical Cyclone Inner-Core Vector Wind Field Dataset (v1.0)},
+  author={Han, Xinhai and Li, Xiaohui and Yang, Jingsong and Ni, Hanyue and Niu, Zeyi and Huang, Wei},
+  year={2026},
+  publisher={Zenodo},
+  doi={10.5281/zenodo.20046109},
+  note={CC BY 4.0}
 }
 ```
 
 ## License
 
-This dataset is distributed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+This dataset is distributed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The accompanying access/visualization code in this repository is released under the MIT License.
+
+## Permanent archive
+
+The scripts and notebooks in this repository are also deposited together with the dataset on Zenodo (same record, single DOI), which serves as the permanent archive:
+
+[10.5281/zenodo.20046109](https://doi.org/10.5281/zenodo.20046109)
+
+This GitHub repository is kept as a development copy and may receive minor updates between dataset releases. When citing a specific code state, please refer to the Zenodo record.
