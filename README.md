@@ -16,6 +16,8 @@ This repository provides data access tools for the **QiFeng-CYGNSS** dataset —
 
 The dataset is described in the companion data descriptor paper submitted to *Earth System Science Data* (Han et al., 2026a). The reconstruction methodology, validation, and ablation experiments are documented in the methodology preprint (Han et al., 2026b; [arXiv:2605.18477](https://arxiv.org/abs/2605.18477)).
 
+**Name origin.** The name *QiFeng* (Chinese: 栖风, *qī fēng* — literally "the wind at rest") evokes the Chinese poetic image of 使风栖定，令无形之风归于完整之形 — "letting the wind settle, so that the formless wind returns to a complete form". The name reflects the dataset's purpose: gathering sparse, direction-free CYGNSS scalar observations and letting them coalesce into a structured kilometre-scale vector wind field.
+
 **Key characteristics:**
 
 | Property | Value |
@@ -151,13 +153,11 @@ If you use this dataset, please cite the data descriptor paper, the methodology 
   note={in review}
 }
 
-@misc{han2026method,
+@article{han2026method,
   title={Global kilometre-scale tropical cyclone inner-core vector winds from sparse scalar {CYGNSS} observations},
-  author={Han, Xinhai and Li, Xiaohui and Yang, Jingsong and Niu, Zeyi and Han, Guoqing and Wang, Jichao and Huang, Wei and Zheng, Yi and Ni, Hanyue and Wang, Yuhang and Tao, Wenwen and Aouf, Lotfi and Peng, Shiqiu and Chen, Dake},
+  author={Han, Xinhai and Li, Xiaohui and Yang, Jingsong and Niu, Zeyi and Han, Guoqi and Wang, Jiuke and Huang, Wei and Zheng, Yunxia and Ni, Hanyue and Wang, Yiqi and Tao, Wei and Aouf, Lotfi and Peng, Shaoliang and Chen, Dake},
+  journal={arXiv preprint arXiv:2605.18477},
   year={2026},
-  eprint={2605.18477},
-  archivePrefix={arXiv},
-  primaryClass={physics.ao-ph},
   doi={10.48550/arXiv.2605.18477}
 }
 
