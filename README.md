@@ -1,4 +1,4 @@
-# QiFeng-CYGNSS: A Global Kilometre-Scale Tropical Cyclone Inner-Core Vector Wind Dataset
+# <img src="https://raw.githubusercontent.com/Watanabeyouuu/QiFeng-CYGNSS-dataset-tools/main/assets/qifeng-chinese-horizontal-8k.png" alt="栖风 Qifeng logo" height="28"> QiFeng-CYGNSS: A Global Kilometre-Scale Tropical Cyclone Inner-Core Vector Wind Dataset
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/Watanabeyouuu/QiFeng-CYGNSS-dataset-tools/main/assets/sample_reconstructions.png" width="90%"/>
