@@ -25,8 +25,8 @@ The dataset is described in the companion data descriptor paper submitted to *Ea
 | Spatial coverage | Storm-relative domain, 384 km × 384 km, all six active global basins (NA, EP, WP, NI, SI, SP) |
 | Grid resolution | 1.5 km (256 × 256 pixels) |
 | Temporal coverage | January 2020 – September 2022 |
-| Number of TCs | 249 named storms |
-| Total snapshots | 4955 (at every IBTrACS reporting time, primarily 6-hourly) |
+| Number of TCs | 313 distinct IBTrACS storm IDs |
+| Total snapshots | 4955 (at IBTrACS reporting times with CYGNSS coverage, primarily 6-hourly) |
 | OCS-pass snapshots | 1960 (39.6 %), recommended for quantitative use |
 | Variables | u10, v10 (10-m wind components), observation metadata, OCS quality flag |
 | Ensemble uncertainty | 16-member pixel-level spread for 138 major-hurricane snapshots |
@@ -37,17 +37,20 @@ The dataset is described in the companion data descriptor paper submitted to *Ea
 
 The full dataset is archived on Zenodo:
 
-[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.20046109-blue)](https://doi.org/10.5281/zenodo.20046109)
+[![DOI](https://img.shields.io/badge/DOI-10.5281%2Fzenodo.23761581-blue)](https://doi.org/10.5281/zenodo.23761581)
 
 ## File Structure
 
 ```
-QiFeng_CYGNSS_dataset/
-├── IAN_2022.nc                  # Per-TC NetCDF files
-├── HINNAMNOR_2022.nc
-├── FIONA_2022.nc
-├── ...                          # 249 per-TC files (one per named storm)
-└── ensemble_uncertainty.nc      # Pixel-level 16-member ensemble spread (138 major-hurricane snapshots)
+QiFeng_output_dataset/
+├── 2022266N12294.nc             # Hurricane Ian, 2022
+├── ...                          # 313 storm files named by IBTrACS SID
+├── snapshot_index.csv
+├── ensemble_index.csv
+├── ensemble_uncertainty.nc      # 16-member wind-speed spread for 138 snapshots
+├── empirical_error_model/
+├── variables.csv
+└── README.txt
 ```
 
 Each per-TC file contains:
@@ -66,6 +69,8 @@ Each per-TC file contains:
 | `obs_pixel_i` | (time, n_obs_max) | Observation pixel row on the 256×256 grid |
 | `obs_pixel_j` | (time, n_obs_max) | Observation pixel column on the 256×256 grid |
 
+For basin and intensity comparisons, match the storm ID and analysis time to the IBTrACS `BASIN` and `USA_WIND` fields.
+
 ## Quick Start
 
 ### Read a NetCDF file
@@ -74,7 +79,7 @@ Each per-TC file contains:
 import xarray as xr
 import numpy as np
 
-ds = xr.open_dataset('IAN_2022.nc')
+ds = xr.open_dataset('2022266N12294.nc')
 
 # Pick a single snapshot
 t = '2022-09-28T00:00:00'
@@ -82,22 +87,20 @@ u10 = ds['u10'].sel(time=t).values   # (256, 256) in m/s
 v10 = ds['v10'].sel(time=t).values
 ws  = np.sqrt(u10**2 + v10**2)
 
-# Metadata
-vmax = ds['ibt_vmax'].sel(time=t).item()
-ocs  = ds['meets_ocs'].sel(time=t).item()
-print(f"Storm: {ds.attrs['storm_name']}, Basin: {ds.attrs['basin']}")
-print(f"IBTrACS Vmax: {vmax} kt, OCS-pass: {ocs}, Max wind in field: {np.nanmax(ws):.1f} m/s")
+ocean = ds['land_mask'].sel(time=t).values == 0
+ocs = ds['meets_ocs'].sel(time=t).item()
+print(f"SID: {ds.sid.item()}, OCS-pass: {ocs}, Ocean peak: {np.nanmax(ws[ocean]):.1f} m/s")
 
-# Optional: companion 16-member ensemble uncertainty file (138 major-hurricane snapshots only)
-# ds_ens = xr.open_dataset('ensemble_uncertainty.nc')
-# spread = ds_ens['ws_spread'].sel(time=t).values
+# Wind-speed spread for the same storm and analysis time
+# ens = xr.open_dataset('ensemble_uncertainty.nc')
+# match = (ens.sid.values == ds.sid.item()) & (ens.time.values == np.datetime64(t))
+# spread = ens.ws_spread.isel(record=match)
 ```
 
 ### Export to GeoTIFF
 
 ```bash
 python export_tiff.py --input /path/to/dataset/ --output ./tiff_export/
-python export_tiff.py --input IAN_2022.nc --output ./tiff_out/ --storm IAN_2022
 ```
 
 See [`export_tiff.py`](export_tiff.py) for batch conversion of NetCDF snapshots to multi-band GeoTIFF (u10, v10, wind_speed).
@@ -114,8 +117,8 @@ See [`export_tiff.py`](export_tiff.py) for batch conversion of NetCDF snapshots 
 
 - The grid is **storm-centric Cartesian**: pixel (128, 128) is the interpolated TC center.
 - Row index increases **southward**, column index increases **eastward**.
-- Physical coordinates can be computed from the TC center and 1.5 km pixel spacing.
-- The `meets_ocs` flag indicates whether observation coverage is sufficient for reliable reconstruction. All three of the following criteria must be met: (a) number of CYGNSS observations `n_obs ≥ 300`; (b) inner-core spatial coverage of at least 7 super-grid cells within 100 km of the TC centre; (c) azimuthal coverage fraction `az_cov ≥ 0.625` (≥ 5 out of 8 azimuthal octants containing observations).
+- The `latitude` and `longitude` variables give the geographic coordinates of each grid cell.
+- The `meets_ocs` flag indicates whether observation coverage is sufficient for reliable reconstruction. All three of the following criteria must be met: (a) number of CYGNSS observations `n_obs ≥ 300`; (b) inner-core spatial coverage of at least seven occupied 25 km cells within 100 km of the TC centre; (c) azimuthal coverage fraction `az_cov ≥ 0.625` (≥ 5 out of 8 azimuthal octants containing observations within 144 km).
 
 ## Validation summary
 
@@ -123,10 +126,10 @@ Independent validation on the OCS-pass subset against high-resolution reference 
 
 | Reference | Cases | Pixel-level wind speed RMSE |
 |-----------|-------|----------------------------|
-| C-band SAR | 47 | 5.58 m s⁻¹ |
-| Airborne Tail Doppler Radar | 23 | 6.9 m s⁻¹ |
+| C-band SAR | 45 overpasses | 6.41 m s⁻¹ |
+| Airborne Tail Doppler Radar | 23 snapshots | 6.9 m s⁻¹ |
 
-Across the full 4955-snapshot sample, the dataset reduces V<sub>max</sub> bias by ~79 % relative to ERA5 and ~75 % relative to CCMP. See Han et al. (2026a, 2026b) for the full evaluation, ablation experiments, and basin-level statistics.
+Across the 1732 OCS-pass snapshots with valid intensities for all three products, maximum-wind RMSE against IBTrACS is 8.2 m s⁻¹ for QiFeng, 12.7 m s⁻¹ for ERA5 and 11.2 m s⁻¹ for CCMP.
 
 ## Requirements
 
@@ -162,11 +165,11 @@ If you use this dataset, please cite the data descriptor paper, the methodology 
 }
 
 @misc{han2026dataset,
-  title={{QiFeng-CYGNSS}: A Global Kilometre-Scale Tropical Cyclone Inner-Core Vector Wind Field Dataset (v1.0)},
+  title={{QiFeng-CYGNSS}: A Global Kilometre-Scale Tropical Cyclone Inner-Core Vector Wind Field Dataset (v1.1)},
   author={Han, Xinhai and Li, Xiaohui and Yang, Jingsong and Ni, Hanyue and Niu, Zeyi and Huang, Wei},
   year={2026},
   publisher={Zenodo},
-  doi={10.5281/zenodo.20046109},
+  doi={10.5281/zenodo.23761581},
   note={CC BY 4.0}
 }
 ```
@@ -179,6 +182,6 @@ This dataset is distributed under [CC BY 4.0](https://creativecommons.org/licens
 
 The scripts and notebooks in this repository are also deposited together with the dataset on Zenodo (same record, single DOI), which serves as the permanent archive:
 
-[10.5281/zenodo.20046109](https://doi.org/10.5281/zenodo.20046109)
+[10.5281/zenodo.23761581](https://doi.org/10.5281/zenodo.23761581)
 
 This GitHub repository is kept as a development copy and may receive minor updates between dataset releases. When citing a specific code state, please refer to the Zenodo record.
